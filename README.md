@@ -10,9 +10,15 @@ This repository contains a Python utility for building an OCR dataset from rando
 - Automatic filtering of documents with short text segments
 - JSONL metadata export compatible with common OCR training pipelines
 
+## Requirements
+
+- Python **3.13.9**
+- [uv](https://github.com/astral-sh/uv) **0.9.3**
+- Poppler utilities (`pdftotext`, `pdftoppm`) available on the system path
+
 ## Usage
 
-Install the project dependencies with [uv](https://github.com/astral-sh/uv) or your preferred package manager, then run the script:
+Install the project dependencies with uv, then run the script:
 
 ```bash
 uv sync
@@ -46,4 +52,4 @@ docker run --rm -v "$PWD/output":/data wiki-ocr-dataset \
   --langs kk ru tg --num_docs 5 --images_per_doc 3 --out_dir /data
 ```
 
-The container installs `poppler-utils` so that `pdf2image` and `pdftotext` work out-of-the-box.
+The container installs `poppler-utils` so that `pdf2image` and `pdftotext` work out-of-the-box. It runs on Python 3.13.9 and uv 0.9.3 as requested.

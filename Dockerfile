@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13.9-slim
 
 ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/app
@@ -8,7 +8,7 @@ RUN apt-get update \
         poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir "uv==0.9.3"
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./

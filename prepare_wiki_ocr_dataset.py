@@ -10,7 +10,7 @@ import random
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import aiohttp
 from aiohttp import ClientResponseError
