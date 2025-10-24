@@ -13,16 +13,26 @@ This repository contains a Python utility for building an OCR dataset from rando
 ## Requirements
 
 - Python **3.13.9**
-- [uv](https://github.com/astral-sh/uv) **0.9.3**
+- `pip` (comes with the official Python distributions)
 - Poppler utilities (`pdftotext`, `pdftoppm`) available on the system path
+
+Install Python and Poppler utilities using your operating system's package manager. On Debian/Ubuntu this looks like:
+
+```bash
+sudo apt-get update
+sudo apt-get install python3.13 python3.13-venv poppler-utils
+```
 
 ## Usage
 
-Install the project dependencies with uv, then run the script:
+Create a virtual environment, install the dependencies from `requirements.txt`, and run the script:
 
 ```bash
-uv sync
-uv run python prepare_wiki_ocr_dataset.py --langs kk ru tg --num_docs 5 --images_per_doc 3
+python3.13 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python prepare_wiki_ocr_dataset.py --langs kk ru tg --num_docs 5 --images_per_doc 3
 ```
 
 Useful command-line options:
@@ -44,7 +54,7 @@ The script prints a summary similar to:
 
 ## Docker
 
-A Docker image is provided for reproducible execution using uv inside the container:
+A Docker image is provided for reproducible execution without managing Python environments manually:
 
 ```bash
 docker build -t wiki-ocr-dataset .
@@ -52,4 +62,4 @@ docker run --rm -v "$PWD/output":/data wiki-ocr-dataset \
   --langs kk ru tg --num_docs 5 --images_per_doc 3 --out_dir /data
 ```
 
-The container installs `poppler-utils` so that `pdf2image` and `pdftotext` work out-of-the-box. It runs on Python 3.13.9 and uv 0.9.3 as requested.
+The container installs `poppler-utils` so that `pdf2image` and `pdftotext` work out-of-the-box. It runs on Python 3.13.9 as requested and installs the application dependencies from `requirements.txt` using `pip`.
