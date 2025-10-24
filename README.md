@@ -1,68 +1,97 @@
 # Wikipedia OCR Dataset Builder
 
-This repository contains a Python utility for building an OCR dataset from random Wikipedia articles exported as PDF files. The tool downloads PDFs, converts them to images, extracts text using `pdftotext`, and stores JSONL metadata describing the generated samples.
+This project turns cleaned Wikipedia articles into an OCR-ready dataset. For each requested language the tool fetches random
+articles, sanitises their HTML, renders paginated PDFs, converts each page into a PNG image, and stores aligned text
+transcriptions for use in OCR training or evaluation pipelines.
 
 ## Features
 
-- Asynchronous fetching of random articles from multiple Wikipedia language editions
-- Conversion of PDFs into PNG page images using `pdf2image`
-- Text extraction through `pdftotext`
-- Automatic filtering of documents with short text segments
-- JSONL metadata export compatible with common OCR training pipelines
+- Fetches random articles from multiple Wikipedia language editions with an identifying User-Agent header
+- Cleans the HTML with BeautifulSoup, keeping only headings, paragraphs, block quotes, and list items
+- Renders the cleaned article into a paginated PDF using WeasyPrint
+- Converts each PDF page into a PNG image at 300 DPI and extracts page-aligned ground truth via `pdftotext`
+- Writes per-document metadata (`meta.json`) alongside the rendered assets in a predictable directory hierarchy
 
 ## Requirements
 
 - Python **3.13.9**
-- `pip` (comes with the official Python distributions)
-- Poppler utilities (`pdftotext`, `pdftoppm`) available on the system path
+- `pip` (bundled with official Python installers)
+- Poppler utilities (`pdftotext`, `pdftoppm`) on the system path
+- Cairo and Pango libraries required by WeasyPrint (`libcairo2`, `libpango-1.0-0`, `libpangoft2-1.0-0`, `libgdk-pixbuf-2.0-0`)
 
-Install Python and Poppler utilities using your operating system's package manager. On Debian/Ubuntu this looks like:
+On Debian/Ubuntu you can install the native dependencies with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3.13 python3.13-venv poppler-utils
+sudo apt-get install python3.13 python3.13-venv poppler-utils libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 fonts-dejavu
 ```
 
 ## Usage
 
-Create a virtual environment, install the dependencies from `requirements.txt`, and run the script:
+Create a virtual environment, install the dependencies, and run the generator:
 
 ```bash
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-python prepare_wiki_ocr_dataset.py --langs kk ru tg --num_docs 5 --images_per_doc 3
+python prepare_wiki_ocr_dataset.py --langs kk,ru,tg --num_docs 50 --output_dir ./wiki_ocr_dataset
 ```
 
-Useful command-line options:
+Key command-line options:
 
-- `--langs`: Space-separated list of language codes (e.g. `kk ru tg`).
-- `--num_docs`: Number of valid PDFs to collect per language.
-- `--images_per_doc`: Maximum number of images stored for each PDF.
-- `--out_dir`: Directory where the dataset will be saved (defaults to `./wiki_ocr_dataset`).
-- `--min_text_len`: Minimum text length (in characters) for a document to be considered valid (defaults to `300`).
-- `--seed`: Seed used for deterministic file naming.
-- `--user_agent`: Custom User-Agent header used for Wikipedia API requests. Set this to a string that identifies your project or organisation as required by the Wikimedia API terms of use.
+- `--langs`: Comma-separated language codes (e.g. `kk,ru,tg`).
+- `--num_docs`: Number of articles to collect for each language.
+- `--output_dir`: Destination directory for the dataset structure.
+- `--user_agent`: Identifying User-Agent string for Wikimedia API access (defaults to a generic project identifier).
+- `--max_attempts`: Maximum number of fetch attempts per language before giving up.
 
-> **Tip:** Wikimedia's REST API expects callers to provide a descriptive User-Agent that includes a way to contact you (see <https://meta.wikimedia.org/wiki/User-Agent_policy>). Override the default value with `--user_agent "my-project/0.1 (contact@example.com)"` if you plan to perform large crawls.
+> **Reminder:** Wikimedia's REST API requires a descriptive User-Agent that includes a way to contact you. Override the default
+> value with something like `--user_agent "my-project/0.1 (contact@example.com)"` for large crawls. See the
+> [User-Agent policy](https://meta.wikimedia.org/wiki/User-Agent_policy) for details.
 
-The script prints a summary similar to:
+### Output structure
+
+The dataset is organised as follows:
 
 ```
-[kk] 10 документов, 85 изображений
-[ru] 8 документов, 73 изображений
-Всего: 18 PDF, 158 изображений
+wiki_ocr_dataset/
+  ru/
+    ru_001/
+      ru_001.pdf
+      images/
+        page_001.png
+        page_002.png
+      text_gt/
+        page_001.txt
+        page_002.txt
+      meta.json
+```
+
+Each `meta.json` file contains metadata similar to:
+
+```json
+{
+  "lang": "ru",
+  "title": "Бенедиктов,_Владимир_Валентинович",
+  "source_url": "https://ru.wikipedia.org/wiki/Бенедиктов,_Владимир_Валентинович",
+  "num_pages": 3,
+  "text_length": 3895,
+  "pages": [
+    {"image": "images/page_001.png", "text": "text_gt/page_001.txt"},
+    {"image": "images/page_002.png", "text": "text_gt/page_002.txt"}
+  ]
+}
 ```
 
 ## Docker
 
-A Docker image is provided for reproducible execution without managing Python environments manually:
+A Dockerfile is provided to run the pipeline in a containerised environment with all binary dependencies pre-installed:
 
 ```bash
 docker build -t wiki-ocr-dataset .
 docker run --rm -v "$PWD/output":/data wiki-ocr-dataset \
-  --langs kk ru tg --num_docs 5 --images_per_doc 3 --out_dir /data
+  --langs kk,ru,tg --num_docs 50 --output_dir /data
 ```
 
-The container installs `poppler-utils` so that `pdf2image` and `pdftotext` work out-of-the-box. It runs on Python 3.13.9 as requested and installs the application dependencies from `requirements.txt` using `pip`.
+The container image is based on Python 3.13.9 and installs the Python dependencies from `requirements.txt` using `pip`.
