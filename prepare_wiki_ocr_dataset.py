@@ -6,83 +6,22 @@ import json
 import logging
 import re
 import subprocess
-import sys
-from ctypes.util import find_library
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import quote
+from xml.sax.saxutils import escape
 
 import requests
 from bs4 import BeautifulSoup
 from pdf2image import convert_from_path
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate
 from tqdm import tqdm
-
-
-def ensure_weasyprint_runtime() -> None:
-    """Validate that the native dependencies required by WeasyPrint are present."""
-
-    required_libs = {
-        "Cairo": ("cairo", "libcairo", "libcairo-2"),
-        "Pango": ("pango-1.0", "libpango-1.0-0"),
-        "PangoFT2": ("pangoft2-1.0", "libpangoft2-1.0-0"),
-        "GDK-PixBuf": ("gdk_pixbuf-2.0", "libgdk_pixbuf-2.0-0"),
-        "GObject": ("gobject-2.0", "libgobject-2.0-0"),
-    }
-
-    package_hints = {
-        "Cairo": {"darwin": "cairo", "linux": "libcairo2"},
-        "Pango": {"darwin": "pango", "linux": "libpango-1.0-0"},
-        "PangoFT2": {"darwin": "pango", "linux": "libpangoft2-1.0-0"},
-        "GDK-PixBuf": {"darwin": "gdk-pixbuf", "linux": "libgdk-pixbuf-2.0-0"},
-        "GObject": {"darwin": "glib", "linux": "libglib2.0-0"},
-    }
-
-    missing = [
-        name
-        for name, candidates in required_libs.items()
-        if not any(find_library(candidate) for candidate in candidates)
-    ]
-
-    if missing:
-        formatted = ", ".join(sorted(missing))
-        platform_key: Optional[str]
-        if sys.platform == "darwin":
-            platform_key = "darwin"
-        elif sys.platform.startswith("linux"):
-            platform_key = "linux"
-        else:
-            platform_key = None
-
-        hints: List[str] = []
-        if platform_key is not None:
-            packages = {
-                package_hints[name][platform_key]
-                for name in missing
-                if platform_key in package_hints[name]
-            }
-            if packages:
-                if platform_key == "darwin":
-                    hints.append(
-                        "macOS (Homebrew): brew install " + " ".join(sorted(packages))
-                    )
-                elif platform_key == "linux":
-                    hints.append(
-                        "Debian/Ubuntu: sudo apt-get install "
-                        + " ".join(sorted(packages))
-                    )
-
-        hint_text = ("\n" + "\n".join(hints)) if hints else ""
-        raise RuntimeError(
-            "Missing native libraries for WeasyPrint: "
-            f"{formatted}.\n"
-            "Install the packages listed in the README." + hint_text
-        )
-
-
-ensure_weasyprint_runtime()
-
-from weasyprint import HTML
 
 LOGGER = logging.getLogger(__name__)
 
@@ -111,6 +50,26 @@ REMOVABLE_TAGS = {
 }
 ALLOWED_TAGS = {"p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
 
+FONT_CANDIDATES = (
+    "DejaVuSans.ttf",
+    "DejaVuSansCondensed.ttf",
+    "LiberationSans-Regular.ttf",
+    "NotoSans-Regular.ttf",
+    "ArialUnicodeMS.ttf",
+    "ArialUnicode.ttf",
+    "Arial.ttf",
+)
+
+FONT_SEARCH_DIRS = (
+    Path("/usr/share/fonts"),
+    Path("/usr/local/share/fonts"),
+    Path.home() / ".local/share/fonts",
+    Path.home() / "Library/Fonts",
+    Path("/Library/Fonts"),
+    Path("/System/Library/Fonts"),
+    Path("C:/Windows/Fonts"),
+)
+
 
 @dataclass
 class ArticleData:
@@ -118,7 +77,7 @@ class ArticleData:
 
     lang: str
     title: str
-    html_content: str
+    blocks: List[Tuple[str, str]]
     plain_text: str
 
 
@@ -150,6 +109,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         type=Path,
         default=DEFAULT_OUTPUT_DIR,
         help="Directory where the dataset will be stored.",
+    )
+    parser.add_argument(
+        "--font_path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to a TrueType font with Cyrillic support. "
+            "If omitted, a common system font such as DejaVu Sans will be used when available."
+        ),
     )
     parser.add_argument(
         "--user_agent",
@@ -222,7 +190,7 @@ def sanitize_html(html_content: str) -> ArticleData:
         for element in body.find_all(tag_name):
             element.decompose()
 
-    blocks: List[str] = []
+    blocks: List[Tuple[str, str]] = []
     texts: List[str] = []
 
     for element in body.find_all(True):
@@ -232,26 +200,15 @@ def sanitize_html(html_content: str) -> ArticleData:
         if not text_value:
             continue
         if element.name == "li":
-            fragment = f"<p>• {text_value}</p>"
+            display_text = f"• {text_value}"
+            blocks.append(("p", display_text))
         else:
-            fragment = f"<{element.name}>{text_value}</{element.name}>"
-        blocks.append(fragment)
+            blocks.append((element.name, text_value))
         texts.append(text_value)
 
-    combined_html = "\n".join(blocks)
     cleaned_text = clean_text(" ".join(texts))
 
-    html_output = (
-        "<html><head><meta charset='utf-8'>"
-        "<style>body{font-family:'DejaVu Sans',sans-serif;font-size:12pt;line-height:1.4;margin:1in;}"
-        "p{margin:0 0 0.8em 0;}"
-        "blockquote{margin:0.8em 1.4em;font-style:italic;}"
-        "</style></head><body>"
-        f"{combined_html}"
-        "</body></html>"
-    )
-
-    return ArticleData(lang="", title="", html_content=html_output, plain_text=cleaned_text)
+    return ArticleData(lang="", title="", blocks=blocks, plain_text=cleaned_text)
 
 
 def prepare_article(session: requests.Session, lang: str, title: str) -> Optional[ArticleData]:
@@ -269,9 +226,118 @@ def prepare_article(session: requests.Session, lang: str, title: str) -> Optiona
     return article
 
 
-def write_pdf(html_content: str, output_path: Path) -> None:
+def resolve_font_path(explicit: Optional[Path]) -> Path:
+    """Locate a suitable TrueType font to embed into generated PDFs."""
+
+    if explicit is not None:
+        if explicit.is_file():
+            return explicit
+        raise FileNotFoundError(f"Font file not found: {explicit}")
+
+    for directory in FONT_SEARCH_DIRS:
+        if not directory.exists():
+            continue
+        for candidate in FONT_CANDIDATES:
+            for path in directory.rglob(candidate):
+                if path.is_file():
+                    return path
+
+    raise FileNotFoundError(
+        "Unable to locate a suitable TrueType font automatically. "
+        "Provide a path via --font_path."
+    )
+
+
+def build_styles(font_name: str) -> Dict[str, ParagraphStyle]:
+    sample = getSampleStyleSheet()
+    base = ParagraphStyle(
+        name="Body",
+        parent=sample["Normal"],
+        fontName=font_name,
+        fontSize=11,
+        leading=14,
+        spaceAfter=8,
+    )
+    heading = ParagraphStyle(
+        name="Heading",
+        parent=base,
+        fontSize=16,
+        leading=19,
+        spaceAfter=10,
+    )
+    subheading = ParagraphStyle(
+        name="SubHeading",
+        parent=base,
+        fontSize=13,
+        leading=16,
+        spaceAfter=9,
+    )
+    blockquote = ParagraphStyle(
+        name="Blockquote",
+        parent=base,
+        leftIndent=18,
+        rightIndent=18,
+        spaceBefore=6,
+        spaceAfter=10,
+    )
+    list_style = ParagraphStyle(
+        name="ListItem",
+        parent=base,
+        leftIndent=12,
+        firstLineIndent=0,
+        spaceAfter=6,
+    )
+
+    return {
+        "body": base,
+        "heading": heading,
+        "subheading": subheading,
+        "blockquote": blockquote,
+        "listitem": list_style,
+    }
+
+
+def write_pdf(article: ArticleData, output_path: Path, font_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    HTML(string=html_content).write_pdf(str(output_path))
+
+    font_name = "DatasetFont"
+    if font_name not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+
+    styles = build_styles(font_name)
+    story: List[Paragraph] = []
+
+    heading_tags = {"h1", "h2"}
+    subheading_tags = {"h3", "h4"}
+
+    for tag, text_value in article.blocks:
+        if tag in heading_tags:
+            style = styles["heading"]
+        elif tag in subheading_tags:
+            style = styles["subheading"]
+        elif tag == "blockquote":
+            style = styles["blockquote"]
+        elif tag == "p" and text_value.startswith("• "):
+            style = styles["listitem"]
+        else:
+            style = styles["body"]
+
+        escaped_text = escape(text_value)
+        story.append(Paragraph(escaped_text, style))
+
+    if not story:
+        story.append(Paragraph(" ", styles["body"]))
+
+    doc = SimpleDocTemplate(
+        str(output_path),
+        pagesize=A4,
+        leftMargin=inch,
+        rightMargin=inch,
+        topMargin=inch,
+        bottomMargin=inch,
+    )
+
+    doc.build(story)
 
 
 def convert_pdf_to_images(pdf_path: Path, images_dir: Path) -> List[Path]:
@@ -340,6 +406,7 @@ def process_language(
     num_docs: int,
     output_dir: Path,
     max_attempts: int,
+    font_path: Path,
 ) -> None:
     lang_dir = output_dir / lang
     lang_dir.mkdir(parents=True, exist_ok=True)
@@ -366,12 +433,11 @@ def process_language(
         text_dir = doc_dir / "text_gt"
 
         try:
-            write_pdf(article.html_content, pdf_path)
+            write_pdf(article, pdf_path, font_path)
             image_paths = convert_pdf_to_images(pdf_path, images_dir)
             text_paths = extract_text_per_page(pdf_path, text_dir, len(image_paths))
         except Exception as exc:  # noqa: BLE001
             LOGGER.error("[%s] Failed to render assets for '%s': %s", lang, title, exc)
-            # Clean partially written doc directory
             cleanup_paths([doc_dir])
             collected -= 1
             continue
@@ -429,6 +495,12 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        font_path = resolve_font_path(args.font_path)
+    except FileNotFoundError as exc:
+        LOGGER.error("%s", exc)
+        raise SystemExit(1) from exc
+
     for lang in args.langs:
         process_language(
             session=session,
@@ -436,6 +508,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             num_docs=args.num_docs,
             output_dir=args.output_dir,
             max_attempts=args.max_attempts,
+            font_path=font_path,
         )
 
 

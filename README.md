@@ -8,7 +8,7 @@ transcriptions for use in OCR training or evaluation pipelines.
 
 - Fetches random articles from multiple Wikipedia language editions with an identifying User-Agent header
 - Cleans the HTML with BeautifulSoup, keeping only headings, paragraphs, block quotes, and list items
-- Renders the cleaned article into a paginated PDF using WeasyPrint
+- Renders the cleaned article into a paginated PDF using ReportLab with embedded Unicode fonts
 - Converts each PDF page into a PNG image at 300 DPI and extracts page-aligned ground truth via `pdftotext`
 - Writes per-document metadata (`meta.json`) alongside the rendered assets in a predictable directory hierarchy
 
@@ -17,20 +17,23 @@ transcriptions for use in OCR training or evaluation pipelines.
 - Python **3.13.9**
 - `pip` (bundled with official Python installers)
 - Poppler utilities (`pdftotext`, `pdftoppm`) on the system path
-- Cairo and Pango libraries required by WeasyPrint (`libcairo2`, `libpango-1.0-0`, `libpangoft2-1.0-0`, `libgdk-pixbuf-2.0-0`, `libglib2.0-0`)
+- A TrueType font that supports Cyrillic characters (for example, DejaVu Sans or Arial Unicode)
 
 On Debian/Ubuntu you can install the native dependencies with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3.13 python3.13-venv poppler-utils libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libglib2.0-0 fonts-dejavu
+sudo apt-get install python3.13 python3.13-venv poppler-utils fonts-dejavu-core
 ```
 
 On macOS with Homebrew:
 
 ```bash
-brew install cairo pango gdk-pixbuf libffi glib
+brew install poppler
 ```
+
+macOS already ships with fonts that cover Cyrillic (e.g. `/System/Library/Fonts/Supplemental/Arial Unicode.ttf`). Pass the
+absolute path via `--font_path` if the automatic search does not find one.
 
 ## Usage
 
@@ -49,6 +52,7 @@ Key command-line options:
 - `--langs`: Comma-separated language codes (e.g. `kk,ru,tg`).
 - `--num_docs`: Number of articles to collect for each language.
 - `--output_dir`: Destination directory for the dataset structure.
+- `--font_path`: Optional explicit path to a TrueType font file to embed in generated PDFs.
 - `--user_agent`: Identifying User-Agent string for Wikimedia API access (defaults to a generic project identifier).
 - `--max_attempts`: Maximum number of fetch attempts per language before giving up.
 
@@ -101,3 +105,4 @@ docker run --rm -v "$PWD/output":/data wiki-ocr-dataset \
 ```
 
 The container image is based on Python 3.13.9 and installs the Python dependencies from `requirements.txt` using `pip`.
+It also installs `fonts-dejavu-core` so the generator can embed a Unicode font without additional configuration.
