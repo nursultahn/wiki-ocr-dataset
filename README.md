@@ -17,19 +17,19 @@ transcriptions for use in OCR training or evaluation pipelines.
 - Python **3.13.9**
 - `pip` (bundled with official Python installers)
 - Poppler utilities (`pdftotext`, `pdftoppm`) on the system path
-- Cairo and Pango libraries required by WeasyPrint (`libcairo2`, `libpango-1.0-0`, `libpangoft2-1.0-0`, `libgdk-pixbuf-2.0-0`)
+- Cairo and Pango libraries required by WeasyPrint (`libcairo2`, `libpango-1.0-0`, `libpangoft2-1.0-0`, `libgdk-pixbuf-2.0-0`, `libglib2.0-0`)
 
 On Debian/Ubuntu you can install the native dependencies with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3.13 python3.13-venv poppler-utils libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 fonts-dejavu
+sudo apt-get install python3.13 python3.13-venv poppler-utils libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 libglib2.0-0 fonts-dejavu
 ```
 
 On macOS with Homebrew:
 
 ```bash
-brew install pango gdk-pixbuf cairo libffi
+brew install cairo pango gdk-pixbuf libffi glib
 ```
 
 ## Usage

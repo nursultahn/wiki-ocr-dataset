@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+import sys
 from ctypes.util import find_library
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +30,14 @@ def ensure_weasyprint_runtime() -> None:
         "GObject": ("gobject-2.0", "libgobject-2.0-0"),
     }
 
+    package_hints = {
+        "Cairo": {"darwin": "cairo", "linux": "libcairo2"},
+        "Pango": {"darwin": "pango", "linux": "libpango-1.0-0"},
+        "PangoFT2": {"darwin": "pango", "linux": "libpangoft2-1.0-0"},
+        "GDK-PixBuf": {"darwin": "gdk-pixbuf", "linux": "libgdk-pixbuf-2.0-0"},
+        "GObject": {"darwin": "glib", "linux": "libglib2.0-0"},
+    }
+
     missing = [
         name
         for name, candidates in required_libs.items()
@@ -37,11 +46,37 @@ def ensure_weasyprint_runtime() -> None:
 
     if missing:
         formatted = ", ".join(sorted(missing))
+        platform_key: Optional[str]
+        if sys.platform == "darwin":
+            platform_key = "darwin"
+        elif sys.platform.startswith("linux"):
+            platform_key = "linux"
+        else:
+            platform_key = None
+
+        hints: List[str] = []
+        if platform_key is not None:
+            packages = {
+                package_hints[name][platform_key]
+                for name in missing
+                if platform_key in package_hints[name]
+            }
+            if packages:
+                if platform_key == "darwin":
+                    hints.append(
+                        "macOS (Homebrew): brew install " + " ".join(sorted(packages))
+                    )
+                elif platform_key == "linux":
+                    hints.append(
+                        "Debian/Ubuntu: sudo apt-get install "
+                        + " ".join(sorted(packages))
+                    )
+
+        hint_text = ("\n" + "\n".join(hints)) if hints else ""
         raise RuntimeError(
             "Missing native libraries for WeasyPrint: "
             f"{formatted}.\n"
-            "Install the packages listed in the README (for example, on macOS: "
-            "`brew install pango gdk-pixbuf cairo libffi`)."
+            "Install the packages listed in the README." + hint_text
         )
 
 
