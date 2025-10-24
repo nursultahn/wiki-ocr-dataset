@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import subprocess
+from ctypes.util import find_library
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
@@ -15,6 +16,37 @@ import requests
 from bs4 import BeautifulSoup
 from pdf2image import convert_from_path
 from tqdm import tqdm
+
+
+def ensure_weasyprint_runtime() -> None:
+    """Validate that the native dependencies required by WeasyPrint are present."""
+
+    required_libs = {
+        "Cairo": ("cairo", "libcairo", "libcairo-2"),
+        "Pango": ("pango-1.0", "libpango-1.0-0"),
+        "PangoFT2": ("pangoft2-1.0", "libpangoft2-1.0-0"),
+        "GDK-PixBuf": ("gdk_pixbuf-2.0", "libgdk_pixbuf-2.0-0"),
+        "GObject": ("gobject-2.0", "libgobject-2.0-0"),
+    }
+
+    missing = [
+        name
+        for name, candidates in required_libs.items()
+        if not any(find_library(candidate) for candidate in candidates)
+    ]
+
+    if missing:
+        formatted = ", ".join(sorted(missing))
+        raise RuntimeError(
+            "Missing native libraries for WeasyPrint: "
+            f"{formatted}.\n"
+            "Install the packages listed in the README (for example, on macOS: "
+            "`brew install pango gdk-pixbuf cairo libffi`)."
+        )
+
+
+ensure_weasyprint_runtime()
+
 from weasyprint import HTML
 
 LOGGER = logging.getLogger(__name__)

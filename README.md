@@ -26,6 +26,12 @@ sudo apt-get update
 sudo apt-get install python3.13 python3.13-venv poppler-utils libcairo2 libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 fonts-dejavu
 ```
 
+On macOS with Homebrew:
+
+```bash
+brew install pango gdk-pixbuf cairo libffi
+```
+
 ## Usage
 
 Create a virtual environment, install the dependencies, and run the generator:
