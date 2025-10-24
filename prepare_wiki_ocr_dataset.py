@@ -8,11 +8,13 @@ import logging
 import os
 import random
 import shutil
+import ssl
 import subprocess
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import aiohttp
+import certifi
 from aiohttp import ClientResponseError
 from pdf2image import convert_from_path
 from tqdm import tqdm
@@ -273,7 +275,11 @@ async def process_language(
 
 async def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, int]]:
     timeout = aiohttp.ClientTimeout(total=180)
-    connector = aiohttp.TCPConnector(limit_per_host=args.max_concurrency)
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+    connector = aiohttp.TCPConnector(
+        limit_per_host=args.max_concurrency,
+        ssl=ssl_context,
+    )
     summary: Dict[str, Dict[str, int]] = {}
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         for lang in args.langs:
