@@ -27,6 +27,7 @@ DEFAULT_LANGS = ("ru",)
 DEFAULT_NUM_DOCS = 5
 DEFAULT_IMAGES_PER_DOC = 5
 DEFAULT_MIN_TEXT_LEN = 300
+DEFAULT_USER_AGENT = "wiki-ocr-dataset/1.0 (+https://github.com/example/wiki-ocr-dataset)"
 MAX_ATTEMPTS_FACTOR = 10
 DOWNLOAD_CONCURRENCY = 4
 CHUNK_SIZE = 1 << 14
@@ -82,6 +83,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=DOWNLOAD_CONCURRENCY,
         help="Maximum number of concurrent PDF downloads",
     )
+    parser.add_argument(
+        "--user_agent",
+        type=str,
+        default=DEFAULT_USER_AGENT,
+        help="User-Agent header to include with Wikipedia API requests",
+    )
 
     args = parser.parse_args(argv)
     if args.num_docs < 1:
@@ -92,6 +99,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         parser.error("--min_text_len must be positive")
     if args.max_concurrency < 1:
         parser.error("--max_concurrency must be positive")
+    if not args.user_agent.strip():
+        parser.error("--user_agent must not be empty")
     return args
 
 
@@ -281,7 +290,12 @@ async def build_dataset(args: argparse.Namespace) -> Dict[str, Dict[str, int]]:
         ssl=ssl_context,
     )
     summary: Dict[str, Dict[str, int]] = {}
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+    headers = {"User-Agent": args.user_agent}
+    async with aiohttp.ClientSession(
+        timeout=timeout,
+        connector=connector,
+        headers=headers,
+    ) as session:
         for lang in args.langs:
             LOGGER.info("Processing language '%s'", lang)
             summary[lang] = await process_language(session, lang, args)

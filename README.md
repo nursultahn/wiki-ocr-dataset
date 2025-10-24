@@ -43,6 +43,9 @@ Useful command-line options:
 - `--out_dir`: Directory where the dataset will be saved (defaults to `./wiki_ocr_dataset`).
 - `--min_text_len`: Minimum text length (in characters) for a document to be considered valid (defaults to `300`).
 - `--seed`: Seed used for deterministic file naming.
+- `--user_agent`: Custom User-Agent header used for Wikipedia API requests. Set this to a string that identifies your project or organisation as required by the Wikimedia API terms of use.
+
+> **Tip:** Wikimedia's REST API expects callers to provide a descriptive User-Agent that includes a way to contact you (see <https://meta.wikimedia.org/wiki/User-Agent_policy>). Override the default value with `--user_agent "my-project/0.1 (contact@example.com)"` if you plan to perform large crawls.
 
 The script prints a summary similar to:
 
